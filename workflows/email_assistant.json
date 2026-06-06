@@ -1,0 +1,2241 @@
+{
+  "name": "Email Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "# Reads & filters your email",
+        "height": 366,
+        "width": 2012,
+        "color": 4
+      },
+      "id": "sticky-intake",
+      "name": "Section Intake",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# You reply from WhatsApp",
+        "height": 520,
+        "width": 1900,
+        "color": 3
+      },
+      "id": "sticky-reply",
+      "name": "Section Reply Loop",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        352,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "",
+        "height": 904,
+        "width": 2460,
+        "color": 6
+      },
+      "id": "sticky-send",
+      "name": "Section Draft Send",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2256,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "is:unread -category:promotions -category:social"
+        },
+        "options": {}
+      },
+      "id": "wf1-trigger",
+      "name": "Every New Email",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        1392,
+        -128
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "xgPtpXrHfGUZItYY",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const j = $json;\nconst headers = (j.payload && Array.isArray(j.payload.headers)) ? j.payload.headers : (Array.isArray(j.headers) ? j.headers : []);\nconst h = (name) => { const f = headers.find(x => x && x.name && String(x.name).toLowerCase() === name.toLowerCase()); return f ? f.value : ''; };\nconst asStr = (v) => {\n  if (!v) return '';\n  if (typeof v === 'string') return v;\n  if (typeof v === 'object') return v.text || (v.value && v.value[0] && (v.value[0].address || v.value[0].name)) || '';\n  return String(v);\n};\nconst from = asStr(j.From || j.from || h('From'));\nconst subject = (asStr(j.Subject || j.subject || h('Subject'))) || '(no subject)';\nconst snippet = String(j.snippet || j.text || '').slice(0, 6000);\nconst email_id = j.id || j.messageId || '';\nconst thread_id = j.threadId || '';\nlet received_at = '';\nconst d = j.Date || j.date || h('Date');\nif (typeof d === 'string') received_at = d; else if (d) received_at = String(d);\nif (!received_at && j.internalDate) { try { received_at = new Date(parseInt(j.internalDate, 10)).toISOString(); } catch (e) {} }\nreturn { json: { email_id, thread_id, from_addr: from, subject, snippet, received_at } };"
+      },
+      "id": "wf1-normalize",
+      "name": "Normalize Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3.1-flash-lite",
+          "cachedResultName": "gemini-3.1-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=From: {{ $('Normalize Email').item.json.from_addr }}\nSubject: {{ $('Normalize Email').item.json.subject }}\nPreview: {{ $('Normalize Email').item.json.snippet }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "You are the email sorting assistant for YOUR_NAME, a professional handling their work email. Decide if an email is REPLY-WORTHY (a real human or opportunity that may need YOUR_NAME's personal reply: clients, colleagues, recruiters, leads, direct personal messages, payment or contract matters) versus IGNORE (newsletters, marketing, promotions, automated notifications, receipts, social updates, no-reply blasts). Be LEAN-INCLUSIVE: when genuinely unsure, mark it reply-worthy (worthy=true). Return ONLY a single valid JSON object, no markdown, no code fences, with EXACTLY these keys: worthy (boolean), category (one of: client, recruiter, job, lead, personal, finance, other), priority (one of: high, normal, low), summary (string, max 200 chars: what it is about and any action needed), reason (string, short why)."
+        }
+      },
+      "id": "wf1-classify",
+      "name": "Classify Email",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        2160,
+        -144
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 8000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "iXaIt6HIOgSsNFvW",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const j = $json;\nconst gt = (o) => {\n  if (!o) return '';\n  if (typeof o === 'string') return o;\n  if (typeof o.text === 'string') return o.text;\n  if (typeof o.content === 'string') return o.content;\n  const c = (o.content && typeof o.content === 'object') ? o.content : o;\n  if (c && Array.isArray(c.parts)) return c.parts.map(p => (p && p.text) ? p.text : '').join('');\n  if (Array.isArray(o.parts)) return o.parts.map(p => (p && p.text) ? p.text : '').join('');\n  if (o.message) return gt(o.message);\n  return '';\n};\nlet raw = gt(j);\nif (typeof raw !== 'string') raw = JSON.stringify(raw);\nlet data = {}; let parseOk = true;\ntry {\n  const c = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\n  const s = c.indexOf('{'); const e = c.lastIndexOf('}');\n  data = JSON.parse(s >= 0 ? c.slice(s, e + 1) : c);\n} catch (err) { parseOk = false; }\nconst worthy = !parseOk ? true : (data.worthy === true || String(data.worthy).toLowerCase() === 'true');\nconst email = $('Normalize Email').item.json;\nreturn { json: {\n  worthy: worthy,\n  category: data.category || 'other',\n  priority: data.priority || 'normal',\n  summary: data.summary || email.subject || '',\n  reason: parseOk ? (data.reason || '') : 'classifier output unparseable - forwarded to be safe',\n  email_id: email.email_id,\n  thread_id: email.thread_id,\n  from_addr: email.from_addr,\n  subject: email.subject,\n  snippet: email.snippet,\n  received_at: email.received_at\n} };"
+      },
+      "id": "wf1-parse",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2496,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "worthy-true",
+              "leftValue": "={{ $json.worthy }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf1-if",
+      "name": "Reply-Worthy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2656,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "=📧 New {{ $json.priority }}-priority email ({{ $json.category }})\nFrom: {{ $json.from_addr }}\nSubject: {{ $json.subject }}\n\n{{ $json.summary }}",
+        "additionalFields": {}
+      },
+      "id": "wf1-alert",
+      "name": "Alert on WhatsApp",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        2880,
+        -288
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "2b142269-debe-4b9a-a5f7-3944448de2c3",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "kp0XhnqyDwI9E8KW",
+          "cachedResultName": "email_queue"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_id",
+              "keyValue": "={{ $('Parse Classification').item.json.email_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email_id": "={{ $('Parse Classification').item.json.email_id }}",
+            "thread_id": "={{ $('Parse Classification').item.json.thread_id }}",
+            "from_addr": "={{ $('Parse Classification').item.json.from_addr }}",
+            "subject": "={{ $('Parse Classification').item.json.subject }}",
+            "snippet": "={{ $('Parse Classification').item.json.snippet }}",
+            "received_at": "={{ $('Parse Classification').item.json.received_at }}",
+            "category": "={{ $('Parse Classification').item.json.category }}",
+            "priority": "={{ $('Parse Classification').item.json.priority }}",
+            "summary": "={{ $('Parse Classification').item.json.summary }}",
+            "status": "alerted",
+            "wa_message_id": "={{ $json.messages && $json.messages[0] ? $json.messages[0].id : '' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "email_id",
+              "displayName": "email_id",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "thread_id",
+              "displayName": "thread_id",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "from_addr",
+              "displayName": "from_addr",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "snippet",
+              "displayName": "snippet",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "priority",
+              "displayName": "priority",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "wa_message_id",
+              "displayName": "wa_message_id",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf1-save",
+      "name": "Save to Queue",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3136,
+        -288
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "id": "wa-trigger",
+      "name": "On WhatsApp Message",
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        416,
+        240
+      ],
+      "webhookId": "7ed9c2a1-3b6e-4c9f-bb21-9e1a2f4d5c60",
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "u0odFcPTGUOef6cc",
+          "name": "WhatsApp OAuth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  let msg = null, meta = {};\n  const dig = (o) => {\n    if (!o || typeof o !== 'object') return;\n    if (o.metadata && (o.metadata.phone_number_id || o.metadata.display_phone_number)) meta = o.metadata;\n    if (Array.isArray(o.messages) && o.messages.length && !msg) msg = o.messages[0];\n    if (Array.isArray(o.entry)) o.entry.forEach(e => dig(e));\n    if (Array.isArray(o.changes)) o.changes.forEach(c => dig(c.value));\n    if (o.value) dig(o.value);\n  };\n  dig(j);\n  if (!msg && (j.type || j.from)) msg = j;\n  msg = msg || {};\n  if (!msg.from) continue;\n  const type = msg.type || '';\n  let text = '';\n  if (type === 'text' && msg.text) text = msg.text.body || '';\n  if (type === 'button' && msg.button) text = msg.button.text || '';\n  if (type === 'interactive' && msg.interactive) { const it = msg.interactive; text = (it.button_reply && it.button_reply.title) || (it.list_reply && it.list_reply.title) || ''; }\n  let audioId = '', audioMime = '';\n  if (type === 'audio' && msg.audio) { audioId = msg.audio.id || ''; audioMime = msg.audio.mime_type || 'audio/ogg'; }\n  const contextId = (msg.context && msg.context.id) ? msg.context.id : '';\n  out.push({ json: { sender: msg.from || '', phoneNumberId: meta.phone_number_id || '', messageId: msg.id || '', type: type, text: text, isVoice: type === 'audio', audioId: audioId, audioMime: audioMime, contextId: contextId, raw_preview: JSON.stringify(j).slice(0, 600) } });\n}\nreturn out;"
+      },
+      "id": "wa-parse",
+      "name": "Parse Incoming Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "kp0XhnqyDwI9E8KW",
+          "cachedResultName": "email_queue"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "keyValue": "alerted"
+            }
+          ]
+        }
+      },
+      "id": "r2a-getcur",
+      "name": "Get Current Email",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1872,
+        320
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep = $('Prep Instruction').first().json;\nconst contextId = (prep && prep.contextId) ? String(prep.contextId).trim() : '';\nconst instruction = (prep && prep.instruction) ? prep.instruction : '';\nlet alertedRows = $('Get Current Email').all().map(i => i.json).filter(r => r && r.email_id && r.status === 'alerted');\nlet swipeRows = contextId ? alertedRows.filter(r => r.wa_message_id === contextId) : [];\nalertedRows.sort((a,b) => String(a.createdAt||'').localeCompare(String(b.createdAt||'')));\nconst mk = (t, mode) => [{ json: { has_target: true, mode: mode||'ok', instruction, email_id: t.email_id, thread_id: t.thread_id, recipient: t.from_addr, subject: t.subject, snippet: t.snippet } }];\nif (swipeRows.length) return mk(swipeRows[0], 'ok');\nconst m = instruction.trim().match(/^#?\\s*(\\d+)\\s*$/);\nif (m && alertedRows.length > 1) { const idx = parseInt(m[1],10)-1; if (idx>=0 && idx<alertedRows.length) return mk(alertedRows[idx], 'ok'); }\nif (alertedRows.length === 1) return mk(alertedRows[0], 'ok');\nif (alertedRows.length === 0) return [{ json: { has_target:false, mode:'none', instruction } }];\nconst list = alertedRows.map((r,i) => `${i+1}) ${r.subject||'(no subject)'} — ${r.from_addr||''}`).join('\\n');\nreturn [{ json: { has_target:false, mode:'ambiguous', instruction, count: alertedRows.length, list } }];"
+      },
+      "id": "r2a-pick",
+      "name": "Pick Active Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3.1-flash-lite",
+          "cachedResultName": "gemini-3.1-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Email I am replying to:\nFrom: {{ $json.recipient }}\nSubject: {{ $json.subject }}\nBody: {{ $json.snippet }}\n\nYOUR_NAME's instruction for this reply: {{ $json.instruction }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "You are drafting an email reply AS YOUR_NAME, a professional handling their work email. YOUR_NAME's instruction may be a rough SPOKEN note transcribed from a voice message — it can contain filler words ('um', 'uh'), pauses, false starts, or self-corrections ('actually, no, ask about the budget'). Interpret their ACTUAL intent and act on their final/corrected wishes; never quote the instruction literally and never mention that it was messy. Write the reply in YOUR_NAME's voice: SHORT and DIRECT (2-4 sentences, no fluff); professional but warm (contractions are fine); open with 'Hi <first name>,' using the sender's first name if you can infer it, otherwise 'Hi,'; close with a sign-off on its own lines - 'Best regards,' then 'YOUR_NAME'. Be honest and grounded: never overclaim experience, and never invent facts, prices, dates, or commitments they have not given. Only address what the email and their instruction cover; if a needed detail is missing, keep it general or politely ask. Output ONLY the email body (greeting, body, sign-off) - no subject line, no preamble, no commentary."
+        }
+      },
+      "id": "r2a-draft",
+      "name": "Draft Reply",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        3552,
+        144
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "iXaIt6HIOgSsNFvW",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const j = $json;\nconst gt = (o) => {\n  if (!o) return '';\n  if (typeof o === 'string') return o;\n  if (typeof o.text === 'string') return o.text;\n  if (typeof o.content === 'string') return o.content;\n  const c = (o.content && typeof o.content === 'object') ? o.content : o;\n  if (c && Array.isArray(c.parts)) return c.parts.map(p => (p && p.text) ? p.text : '').join('');\n  if (Array.isArray(o.parts)) return o.parts.map(p => (p && p.text) ? p.text : '').join('');\n  if (o.message) return gt(o.message);\n  return '';\n};\nlet draft = gt(j);\nif (typeof draft !== 'string') draft = String(draft || '');\ndraft = draft.trim();\ndraft = draft.replace(/(Best regards,)\\s+(YOUR_NAME)/i, '$1\\n$2');\nconst t = $('Pick Active Email').item.json;\nreturn { json: { draft_text: draft, email_id: t.email_id, thread_id: t.thread_id, recipient: t.recipient, subject: t.subject, instruction: t.instruction || '' } };"
+      },
+      "id": "r2a-extract",
+      "name": "Extract Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3872,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ymVK7jmYRITHpnen",
+          "cachedResultName": "reply_sessions"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_id",
+              "keyValue": "={{ $json.email_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email_id": "={{ $json.email_id }}",
+            "thread_id": "={{ $json.thread_id }}",
+            "recipient": "={{ $json.recipient }}",
+            "subject": "={{ $json.subject }}",
+            "draft_text": "={{ $json.draft_text }}",
+            "state": "awaiting_approval"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "email_id",
+              "displayName": "email_id",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "thread_id",
+              "displayName": "thread_id",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "draft_text",
+              "displayName": "draft_text",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "state",
+              "displayName": "state",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "r2a-store",
+      "name": "Store Draft",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4080,
+        128
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "=✍️ Draft reply to {{ $('Extract Draft').item.json.recipient }} (re: {{ $('Extract Draft').item.json.subject }}):\n\n{{ $('Extract Draft').item.json.draft_text }}\n\n💬 from your message:\n{{ $('Extract Draft').item.json.instruction }}\n\n— Reply CONFIRM to send it as-is, or tell me what to change.",
+        "additionalFields": {}
+      },
+      "id": "r2a-review",
+      "name": "Send Draft for Review",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        4272,
+        128
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "022f804f-a4d3-4e1c-bd94-449745ef672c",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "⚠️ I couldn't draft a reply just now (AI busy). Please resend your instruction in a moment.",
+        "additionalFields": {}
+      },
+      "id": "r2a-fail",
+      "name": "Draft Failed Note",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        3872,
+        272
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "2b107f62-691d-421b-b9ab-a50648ce7504",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-voice",
+              "leftValue": "={{ $json.isVoice }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "r2b-isvoice",
+      "name": "Is Voice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1008,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "media",
+        "operation": "mediaUrlGet",
+        "mediaGetId": "={{ $('Parse Incoming Message').item.json.audioId }}"
+      },
+      "id": "r2b-dl",
+      "name": "Download Voice",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "97c85cbd-b1f8-4200-9330-e488b1f2e9b6",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "r2b-fetch",
+      "name": "Fetch Voice File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3.1-flash-lite",
+          "cachedResultName": "gemini-3.1-flash-lite"
+        },
+        "inputType": "binary",
+        "options": {}
+      },
+      "id": "r2b-transcribe",
+      "name": "Transcribe Voice",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1520,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "iXaIt6HIOgSsNFvW",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const parse = $('Parse Incoming Message').item.json;\nlet instruction = parse.text || '';\ntry {\n  const gt = (o) => { if (!o) return ''; if (typeof o === 'string') return o; if (typeof o.text === 'string') return o.text; if (typeof o.content === 'string') return o.content; const c = (o.content && typeof o.content === 'object') ? o.content : o; if (c && Array.isArray(c.parts)) return c.parts.map(p => (p && p.text) ? p.text : '').join(''); if (Array.isArray(o.parts)) return o.parts.map(p => (p && p.text) ? p.text : '').join(''); return ''; };\n  const tr = $('Transcribe Voice').first().json;\n  const t = gt(tr);\n  if (t && t.trim()) instruction = t.trim();\n} catch (e) {}\nif (!instruction && parse.isVoice) instruction = '(could not transcribe the voice note)';\nreturn { json: { instruction: instruction, sender: parse.sender || '', contextId: parse.contextId || '', isVoice: !!parse.isVoice } };"
+      },
+      "id": "r2b-prep",
+      "name": "Prep Instruction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1712,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ymVK7jmYRITHpnen",
+          "cachedResultName": "reply_sessions"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_id",
+              "keyValue": "={{ $json.email_id }}"
+            }
+          ]
+        }
+      },
+      "id": "r2c-find",
+      "name": "Find Existing Draft",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        144
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3.5-flash",
+          "cachedResultName": "gemini-3.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Draft awaiting approval: {{ $json.state === 'awaiting_approval' ? 'YES' : 'NO' }}.\nYOUR_NAME's message: {{ $('Pick Active Email').item.json.instruction }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "You route YOUR_NAME's WhatsApp reply about an email draft. Return ONLY JSON {\"intent\":\"confirm\"|\"revise\"|\"cancel\"|\"dismiss\"|\"unclear\"}. The message states 'Draft awaiting approval: YES/NO'. Definitions: confirm = ONLY when a draft is awaiting approval AND YOUR_NAME clearly and unambiguously approves sending that exact draft AS-IS with no changes (e.g. 'CONFIRM', 'send it', 'yes send it', 'go ahead send', 'looks good send it') and the message is ONLY an approval. revise = YOUR_NAME gives any instruction or change for the reply content (e.g. 'tell him I'm available', 'add that I'll call', 'make it shorter', 'actually say I'm booked'), even if it mentions send. cancel = YOUR_NAME wants to abandon THIS reply without sending (e.g. 'cancel', 'never mind', 'forget it', 'drop it', \"don't send\", 'stop', 'scratch that'). dismiss = YOUR_NAME wants to skip/ignore the whole EMAIL, not reply at all (e.g. 'skip this', 'ignore this email', 'not replying', 'dismiss', 'leave it'). unclear = vague, a bare acknowledgement ('ok','k','cool','thanks','sure','👍'), incomplete, or confirm-like when NO draft is awaiting. Rules: when in ANY doubt choose unclear; NEVER guess confirm; confirm REQUIRES awaiting=YES. If torn between cancel and dismiss, pick cancel when a draft is awaiting."
+        }
+      },
+      "id": "r2c-intent",
+      "name": "Read Intent",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        2848,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "iXaIt6HIOgSsNFvW",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const j = $json;\nconst gt = (o) => { if(!o) return ''; if(typeof o==='string') return o; if(typeof o.text==='string') return o.text; if(typeof o.content==='string') return o.content; const c=(o.content&&typeof o.content==='object')?o.content:o; if(c&&Array.isArray(c.parts)) return c.parts.map(p=>(p&&p.text)?p.text:'').join(''); if(Array.isArray(o.parts)) return o.parts.map(p=>(p&&p.text)?p.text:'').join(''); if(o.message) return gt(o.message); return ''; };\nlet raw = gt(j); if (typeof raw !== 'string') raw = JSON.stringify(raw);\nlet intent = 'unclear';\ntry { const c = raw.replace(/```json/gi,'').replace(/```/g,'').trim(); const s=c.indexOf('{'); const e=c.lastIndexOf('}'); const data = JSON.parse(s>=0?c.slice(s,e+1):c); const v = String(data.intent||'').toLowerCase(); if (['confirm','revise','cancel','dismiss','unclear'].includes(v)) intent = v; } catch (err) { intent = 'unclear'; }\nconst pick = $('Pick Active Email').item.json;\nlet draft_text = '';\ntry { const fed = $('Find Existing Draft').first().json; if (fed && fed.state === 'awaiting_approval' && fed.draft_text) draft_text = fed.draft_text; } catch (e) {}\nconst raw2 = String(pick.recipient || '');\nlet email = '';\nconst m = raw2.match(/<([^>]+)>/);\nif (m) { email = m[1]; } else { const m2 = raw2.match(/[^\\s<>]+@[^\\s<>]+/); email = m2 ? m2[0] : raw2; }\nemail = email.trim().toLowerCase();\nif (intent === 'confirm' && !draft_text) intent = 'unclear';\nif (intent === 'cancel' && !draft_text) intent = 'unclear';\nreturn { json: { intent: intent, email_id: pick.email_id, thread_id: pick.thread_id, recipient: pick.recipient, recipient_email: email, subject: pick.subject, snippet: pick.snippet, instruction: pick.instruction, draft_text: draft_text } };"
+      },
+      "id": "r2c-parse",
+      "name": "Parse Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3168,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "self-only",
+              "leftValue": "={{ $json.recipient_email }}",
+              "rightValue": "YOUR_EMAIL@example.com",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "r2c-gate",
+      "name": "Self-Only Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3600,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.email_id }}",
+        "emailType": "text",
+        "message": "={{ $json.draft_text }}",
+        "options": {}
+      },
+      "id": "r2c-send",
+      "name": "Send Gmail Reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3872,
+        -208
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "7ecb84d4-b1a0-4b21-a445-6fca1dc42cd0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "xgPtpXrHfGUZItYY",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "kp0XhnqyDwI9E8KW",
+          "cachedResultName": "email_queue"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_id",
+              "keyValue": "={{ $('Pick Active Email').item.json.email_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "replied"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "r2c-markmail",
+      "name": "Mark Email Replied",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4064,
+        -208
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ymVK7jmYRITHpnen",
+          "cachedResultName": "reply_sessions"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_id",
+              "keyValue": "={{ $('Pick Active Email').item.json.email_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "state": "sent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "state",
+              "displayName": "state",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "r2c-marksess",
+      "name": "Mark Session Sent",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4256,
+        -208
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "=✅ Sent — replied to {{ $('Pick Active Email').item.json.recipient }} in the thread.",
+        "additionalFields": {}
+      },
+      "id": "r2c-sent",
+      "name": "Sent Confirm",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        4464,
+        -208
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "fbe010fd-a648-4e34-8f33-4f1bb1aad47b",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "🔒 Held for safety — this draft is addressed to someone other than you, so I didn't send it.",
+        "additionalFields": {}
+      },
+      "id": "r2c-blocked",
+      "name": "Blocked Note",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        3872,
+        -32
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "24ddd3ab-81c0-43ec-966d-6a359076ee0b",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "🤔 I wasn't sure if that was an approval or a change. Reply CONFIRM to send the current draft as-is, or tell me exactly what to change. (No draft yet? Just tell me what to say.)",
+        "additionalFields": {}
+      },
+      "id": "r2c-reask",
+      "name": "Re-ask",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        3872,
+        816
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "9a743e78-7ccf-4855-8e8f-a446f315a0bf",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "kp0XhnqyDwI9E8KW",
+          "cachedResultName": "email_queue"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_id",
+              "keyValue": "={{ $json.email_id }}"
+            }
+          ]
+        }
+      },
+      "id": "7902ed68-0006-469d-86a7-45371d68fedd",
+      "name": "Dedup Check",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        -128
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "is-new",
+              "leftValue": "={{ $json.email_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9ec84fd6-f1ae-4f66-bbba-ec98783aa269",
+      "name": "New Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1952,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "voice",
+              "leftValue": "={{ $json.isVoice }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "hastext",
+              "leftValue": "={{ $json.text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "6013fcee-bc1e-458c-b158-b30a6630c6ca",
+      "name": "Supported Input?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        816,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "🤔 I didn't get that — send me a text reply or a voice note and I'll take it from there.",
+        "additionalFields": {}
+      },
+      "id": "494dc557-794e-4088-8b9f-8f6b87f62913",
+      "name": "Didn't Get That",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1008,
+        400
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "62c367e1-38b0-4292-99ff-35b1c4c4f514",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "=📥 You have {{ $json.count }} emails waiting — which one?\n\n{{ $json.list }}\n\nReply with the number, or swipe-reply the alert you mean.",
+        "additionalFields": {}
+      },
+      "id": "0d4ed02f-bf05-436f-8fcd-18458b1fe5d0",
+      "name": "Which Email?",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        320
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "ca10fb4d-107b-4f37-99d6-fc0e91c1b3c3",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "📭 Nothing's waiting for a reply right now. When you get a 📧 alert, reply to it (or swipe it) with your instruction.",
+        "additionalFields": {}
+      },
+      "id": "8760f5ea-a1c1-4fac-821d-77c74a58a59e",
+      "name": "Nothing Waiting",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        496
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "bc9f3927-6130-4d2d-9814-eb9b849bf7b8",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ymVK7jmYRITHpnen",
+          "cachedResultName": "reply_sessions"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_id",
+              "keyValue": "={{ $('Pick Active Email').item.json.email_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "state": "cancelled"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "state",
+              "displayName": "state",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bf4bc86e-6006-43a7-81a2-8059d469ef82",
+      "name": "Mark Cancelled",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3872,
+        464
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "🚫 Okay, cancelled — I won't send that reply.",
+        "additionalFields": {}
+      },
+      "id": "695dd9ef-3f3d-4aa7-875a-e5ad53a0d493",
+      "name": "Cancelled Note",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        4080,
+        464
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "3ba414e1-2125-49ab-8200-de8f4ada5857",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "kp0XhnqyDwI9E8KW",
+          "cachedResultName": "email_queue"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_id",
+              "keyValue": "={{ $('Pick Active Email').item.json.email_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "dismissed"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e9ca8f5e-530a-4dd1-bb99-66129dc0b9b3",
+      "name": "Mark Dismissed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3872,
+        624
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "messagingProduct": "whatsApp",
+        "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
+        "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
+        "textBody": "🗑️ Dropped from your queue — I won't reply to that one.",
+        "additionalFields": {}
+      },
+      "id": "f9ddc88b-73df-48b9-b459-5814b82d6c18",
+      "name": "Dismissed Note",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        4080,
+        624
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "2660b058-bccf-429d-a41d-b966dff14b7a",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WRBrBUuyjvWdX5rb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pick = $('Pick Active Email').first().json;\nconst instr = String(pick.instruction || '').trim().toLowerCase().replace(/[.!\\s]+$/,'').trim();\nlet fed = {}; try { fed = $('Find Existing Draft').first().json || {}; } catch(e){}\nconst awaiting = !!(fed && fed.state === 'awaiting_approval' && fed.draft_text);\nlet quick = 'defer';\nconst VAGUE = ['ok','k','kk','okay','okey','cool','thanks','thank you','ty','sure','great','nice','got it','yep','yup','👍','👌','🙏'];\nif (VAGUE.includes(instr)) quick = 'unclear';\nelse if (awaiting && /^(confirm|send|send it|send that|yes send it|go ahead( and)? send|looks good,? send( it)?|send the reply)$/.test(instr)) quick = 'confirm';\nelse if (awaiting && /^(cancel|cancel that|never ?mind|nevermind|forget it|drop it|stop|scratch that|don'?t send( it)?)$/.test(instr)) quick = 'cancel';\nelse if (/^(skip|skip this|skip this one|ignore|ignore this|ignore this email|dismiss|dismiss this|not replying|not replying to (this|that)|leave it)$/.test(instr)) quick = 'dismiss';\nreturn [{ json: { quick_intent: quick } }];"
+      },
+      "id": "25329772-9ae8-4e4b-8a9e-79790ba346a9",
+      "name": "Quick Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "rv",
+              "leftValue": "={{ $json.quick_intent }}",
+              "rightValue": "defer",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0ed0b444-ba4b-41ef-a7dd-9749f1125730",
+      "name": "Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2704,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const intent = String($input.first().json.quick_intent || 'unclear');\nconst pick = $('Pick Active Email').first().json;\nlet draft_text = '';\ntry { const fed = $('Find Existing Draft').first().json; if (fed && fed.state === 'awaiting_approval' && fed.draft_text) draft_text = fed.draft_text; } catch (e) {}\nconst raw2 = String(pick.recipient || '');\nlet email = '';\nconst m = raw2.match(/<([^>]+)>/);\nif (m) { email = m[1]; } else { const m2 = raw2.match(/[^\\s<>]+@[^\\s<>]+/); email = m2 ? m2[0] : raw2; }\nemail = email.trim().toLowerCase();\nlet fin = intent;\nif (fin === 'confirm' && !draft_text) fin = 'unclear';\nif (fin === 'cancel' && !draft_text) fin = 'unclear';\nreturn [{ json: { intent: fin, email_id: pick.email_id, thread_id: pick.thread_id, recipient: pick.recipient, recipient_email: email, subject: pick.subject, snippet: pick.snippet, instruction: pick.instruction, draft_text: draft_text } }];"
+      },
+      "id": "ec0e4588-9d02-4c73-8258-bb5c7bc55594",
+      "name": "Finalize Quick",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "t-ok",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "ok"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ok"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "t-amb",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "ambiguous"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ambiguous"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "none"
+        }
+      },
+      "id": "1d92fae6-f39d-4152-b0cc-826020771c32",
+      "name": "Route Target",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2208,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "r-confirm",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "confirm"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "confirm"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "r-revise",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "revise"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "revise"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "r-cancel",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "cancel"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cancel"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "r-dismiss",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "dismiss"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "dismiss"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unclear"
+        }
+      },
+      "id": "2a9535c2-8af9-48df-b550-aa24bd8c87b5",
+      "name": "Route Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3344,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# Draft, Approve & Send\n",
+        "height": 1304,
+        "width": 1324,
+        "color": 6
+      },
+      "id": "8bc2e991-8d90-4c70-9356-1586daa47c22",
+      "name": "Section Draft Send1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3392,
+        -320
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every New Email": {
+      "main": [
+        [
+          {
+            "node": "Normalize Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Email": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "Reply-Worthy?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply-Worthy?": {
+      "main": [
+        [
+          {
+            "node": "Alert on WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert on WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Save to Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On WhatsApp Message": {
+      "main": [
+        [
+          {
+            "node": "Parse Incoming Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Email": {
+      "main": [
+        [
+          {
+            "node": "Pick Active Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Reply": {
+      "main": [
+        [
+          {
+            "node": "Extract Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft Failed Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Draft": {
+      "main": [
+        [
+          {
+            "node": "Store Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Draft": {
+      "main": [
+        [
+          {
+            "node": "Send Draft for Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Voice?": {
+      "main": [
+        [
+          {
+            "node": "Download Voice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prep Instruction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Voice": {
+      "main": [
+        [
+          {
+            "node": "Fetch Voice File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Voice File": {
+      "main": [
+        [
+          {
+            "node": "Transcribe Voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Voice": {
+      "main": [
+        [
+          {
+            "node": "Prep Instruction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prep Instruction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Intent": {
+      "main": [
+        [
+          {
+            "node": "Parse Intent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Self-Only Gate": {
+      "main": [
+        [
+          {
+            "node": "Send Gmail Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Blocked Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Gmail Reply": {
+      "main": [
+        [
+          {
+            "node": "Mark Email Replied",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Email Replied": {
+      "main": [
+        [
+          {
+            "node": "Mark Session Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Session Sent": {
+      "main": [
+        [
+          {
+            "node": "Sent Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Email": {
+      "main": [
+        [
+          {
+            "node": "Dedup Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup Check": {
+      "main": [
+        [
+          {
+            "node": "New Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Email?": {
+      "main": [
+        [
+          {
+            "node": "Classify Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Incoming Message": {
+      "main": [
+        [
+          {
+            "node": "Supported Input?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supported Input?": {
+      "main": [
+        [
+          {
+            "node": "Is Voice?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Didn't Get That",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Cancelled": {
+      "main": [
+        [
+          {
+            "node": "Cancelled Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Dismissed": {
+      "main": [
+        [
+          {
+            "node": "Dismissed Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Existing Draft": {
+      "main": [
+        [
+          {
+            "node": "Quick Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quick Intent": {
+      "main": [
+        [
+          {
+            "node": "Resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolved?": {
+      "main": [
+        [
+          {
+            "node": "Finalize Quick",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Active Email": {
+      "main": [
+        [
+          {
+            "node": "Route Target",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Target": {
+      "main": [
+        [
+          {
+            "node": "Find Existing Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Which Email?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing Waiting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Quick": {
+      "main": [
+        [
+          {
+            "node": "Route Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Intent": {
+      "main": [
+        [
+          {
+            "node": "Route Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Intent": {
+      "main": [
+        [
+          {
+            "node": "Self-Only Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Dismissed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Re-ask",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Instruction": {
+      "main": [
+        [
+          {
+            "node": "Get Current Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "R5ZjXIuVz5otPr4e"
+  },
+  "versionId": "f79e6086-6548-4ea9-b812-b4d3ac398c08",
+  "meta": {
+    "instanceId": "41e039cedb3a36a88c7cb06e1c01ecdba11906eba63c30992aded5ab7e47dc72"
+  },
+  "id": "sCfcFOnLOUv1p0Kp",
+  "tags": []
+}

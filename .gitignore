@@ -1,0 +1,27 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.token
+secrets/
+
+# n8n credential exports (workflow JSON is safe; credential data is not)
+*credentials*.json
+credentials.json
+.n8n/
+
+# Dependencies & output
+node_modules/
+dist/
+build/
+__pycache__/
+
+# Logs, caches, OS/editor files
+*.log
+.cache/
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
