@@ -63,10 +63,10 @@ Under the hood, it tracks everything in two n8n Data Tables: `email_queue` and `
 
 ## Setup
 
-Import `workflows/email_assistant.json`, then connect your own accounts:
+Import both workflows from `workflows/`, then connect your own accounts:
 
 1. **Credentials** — Google Gemini, WhatsApp Cloud API (sending), WhatsApp Trigger (receiving), Gmail OAuth.
-2. **Data Tables** — create two and point each Data Table node at yours:
+2. **Data Tables** — open `setup_tables.json` and click **Execute workflow** once to create both (safe to re-run; existing tables are reused). The main workflow finds them **by name**, so there's nothing to re-point:
    - `email_queue`: email_id, thread_id, from_addr, subject, snippet, received_at, category, priority, summary, status, wa_message_id
    - `reply_sessions`: email_id, thread_id, recipient, subject, draft_text, state
 3. **Your numbers** — set `recipientPhoneNumber` and `phoneNumberId` on the WhatsApp nodes (keep as `={{ '...' }}`).

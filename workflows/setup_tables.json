@@ -1,0 +1,84 @@
+{
+  "name": "Email Assistant - Setup Tables",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Run once to create the Data Tables\n\nClick **Execute workflow**. This creates the two Data Tables the Email Assistant needs:\n`email_queue` and `reply_sessions`.\n\nSafe to re-run — if a table already exists it is reused, not duplicated. The main workflow references both tables **by name**, so no manual re-pointing is needed.",
+        "height": 260,
+        "width": 420,
+        "color": 4
+      },
+      "id": "setup-note",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [400, -120]
+    },
+    {
+      "parameters": {},
+      "id": "setup-trigger",
+      "name": "Execute workflow",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [460, 80]
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "email_queue",
+        "columns": {
+          "column": [
+            { "name": "email_id", "type": "string" },
+            { "name": "thread_id", "type": "string" },
+            { "name": "from_addr", "type": "string" },
+            { "name": "subject", "type": "string" },
+            { "name": "snippet", "type": "string" },
+            { "name": "received_at", "type": "string" },
+            { "name": "category", "type": "string" },
+            { "name": "priority", "type": "string" },
+            { "name": "summary", "type": "string" },
+            { "name": "status", "type": "string" },
+            { "name": "wa_message_id", "type": "string" }
+          ]
+        },
+        "options": { "createIfNotExists": true }
+      },
+      "id": "setup-create-queue",
+      "name": "Create email_queue",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [680, 80]
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "reply_sessions",
+        "columns": {
+          "column": [
+            { "name": "email_id", "type": "string" },
+            { "name": "thread_id", "type": "string" },
+            { "name": "recipient", "type": "string" },
+            { "name": "subject", "type": "string" },
+            { "name": "draft_text", "type": "string" },
+            { "name": "state", "type": "string" }
+          ]
+        },
+        "options": { "createIfNotExists": true }
+      },
+      "id": "setup-create-sessions",
+      "name": "Create reply_sessions",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [900, 80]
+    }
+  ],
+  "connections": {
+    "Execute workflow": { "main": [[{ "node": "Create email_queue", "type": "main", "index": 0 }]] },
+    "Create email_queue": { "main": [[{ "node": "Create reply_sessions", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

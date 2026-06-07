@@ -213,9 +213,8 @@
         "operation": "upsert",
         "dataTableId": {
           "__rl": true,
-          "mode": "id",
-          "value": "kp0XhnqyDwI9E8KW",
-          "cachedResultName": "email_queue"
+          "mode": "name",
+          "value": "email_queue"
         },
         "matchType": "allConditions",
         "filters": {
@@ -421,18 +420,10 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "mode": "id",
-          "value": "kp0XhnqyDwI9E8KW",
-          "cachedResultName": "email_queue"
+          "mode": "name",
+          "value": "email_queue"
         },
-        "filters": {
-          "conditions": [
-            {
-              "keyName": "status",
-              "keyValue": "alerted"
-            }
-          ]
-        }
+        "returnAll": true
       },
       "id": "r2a-getcur",
       "name": "Get Current Email",
@@ -446,7 +437,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const prep = $('Prep Instruction').first().json;\nconst contextId = (prep && prep.contextId) ? String(prep.contextId).trim() : '';\nconst instruction = (prep && prep.instruction) ? prep.instruction : '';\nlet alertedRows = $('Get Current Email').all().map(i => i.json).filter(r => r && r.email_id && r.status === 'alerted');\nlet swipeRows = contextId ? alertedRows.filter(r => r.wa_message_id === contextId) : [];\nalertedRows.sort((a,b) => String(a.createdAt||'').localeCompare(String(b.createdAt||'')));\nconst mk = (t, mode) => [{ json: { has_target: true, mode: mode||'ok', instruction, email_id: t.email_id, thread_id: t.thread_id, recipient: t.from_addr, subject: t.subject, snippet: t.snippet } }];\nif (swipeRows.length) return mk(swipeRows[0], 'ok');\nconst m = instruction.trim().match(/^#?\\s*(\\d+)\\s*$/);\nif (m && alertedRows.length > 1) { const idx = parseInt(m[1],10)-1; if (idx>=0 && idx<alertedRows.length) return mk(alertedRows[idx], 'ok'); }\nif (alertedRows.length === 1) return mk(alertedRows[0], 'ok');\nif (alertedRows.length === 0) return [{ json: { has_target:false, mode:'none', instruction } }];\nconst list = alertedRows.map((r,i) => `${i+1}) ${r.subject||'(no subject)'} — ${r.from_addr||''}`).join('\\n');\nreturn [{ json: { has_target:false, mode:'ambiguous', instruction, count: alertedRows.length, list } }];"
+        "jsCode": "const prep = $('Prep Instruction').first().json;\nconst contextId = (prep && prep.contextId) ? String(prep.contextId).trim() : '';\nconst instruction = (prep && prep.instruction) ? prep.instruction : '';\nconst sd = $getWorkflowStaticData('global');\nconst draftMap = (sd && sd.draftMap) ? sd.draftMap : {};\nconst allRows = $('Get Current Email').all().map(i => i.json).filter(r => r && r.email_id);\nconst alertedRows = allRows.filter(r => r.status === 'alerted');\nalertedRows.sort((a,b) => String(a.createdAt||'').localeCompare(String(b.createdAt||'')));\nconst rowById = (id) => allRows.find(r => r.email_id === id);\nconst mk = (t, mode) => [{ json: { has_target: mode === 'ok', mode: mode || 'ok', instruction, email_id: t.email_id, thread_id: t.thread_id, recipient: t.from_addr, subject: t.subject, snippet: t.snippet } }];\nconst note = (mode, extra) => [{ json: Object.assign({ has_target: false, mode: mode, instruction: instruction }, extra || {}) }];\nif (contextId && draftMap[contextId]) {\n  const eid = draftMap[contextId];\n  const row = rowById(eid);\n  if (row) {\n    if (row.status === 'alerted') return mk(row, 'ok');\n    if (row.status === 'replied') return note('none', { reason: 'already_sent', email_id: eid, subject: row.subject });\n    if (row.status === 'dismissed') return note('none', { reason: 'already_dismissed', email_id: eid, subject: row.subject });\n  }\n}\nif (contextId) {\n  const arow = allRows.find(r => r.wa_message_id === contextId);\n  if (arow) {\n    if (arow.status === 'alerted') return mk(arow, 'ok');\n    if (arow.status === 'replied') return note('none', { reason: 'already_sent', email_id: arow.email_id, subject: arow.subject });\n    if (arow.status === 'dismissed') return note('none', { reason: 'already_dismissed', email_id: arow.email_id, subject: arow.subject });\n  }\n}\nconst m = instruction.trim().match(/^#?\\s*(\\d+)\\s*$/);\nif (m && alertedRows.length > 1) { const idx = parseInt(m[1],10) - 1; if (idx >= 0 && idx < alertedRows.length) return mk(alertedRows[idx], 'ok'); }\nif (alertedRows.length === 1) return mk(alertedRows[0], 'ok');\nif (alertedRows.length === 0) return note('none', { reason: 'nothing' });\nconst list = alertedRows.map((r,i) => (i+1) + ') ' + (r.subject || '(no subject)') + ' — ' + (r.from_addr || '')).join('\\n');\nreturn note('ambiguous', { count: alertedRows.length, list: list });"
       },
       "id": "r2a-pick",
       "name": "Pick Active Email",
@@ -468,13 +459,13 @@
         "messages": {
           "values": [
             {
-              "content": "=Email I am replying to:\nFrom: {{ $json.recipient }}\nSubject: {{ $json.subject }}\nBody: {{ $json.snippet }}\n\nYOUR_NAME's instruction for this reply: {{ $json.instruction }}"
+              "content": "=Email I am replying to:\nFrom: {{ $json.recipient }}\nSubject: {{ $json.subject }}\nBody: {{ $json.snippet }}\n\nCURRENT DRAFT (if blank, write a fresh reply; if present, revise THIS exact draft):\n{{ $json.draft_text }}\n\nYOUR_NAME's instruction for this reply: {{ $json.instruction }}"
             }
           ]
         },
         "builtInTools": {},
         "options": {
-          "systemMessage": "You are drafting an email reply AS YOUR_NAME, a professional handling their work email. YOUR_NAME's instruction may be a rough SPOKEN note transcribed from a voice message — it can contain filler words ('um', 'uh'), pauses, false starts, or self-corrections ('actually, no, ask about the budget'). Interpret their ACTUAL intent and act on their final/corrected wishes; never quote the instruction literally and never mention that it was messy. Write the reply in YOUR_NAME's voice: SHORT and DIRECT (2-4 sentences, no fluff); professional but warm (contractions are fine); open with 'Hi <first name>,' using the sender's first name if you can infer it, otherwise 'Hi,'; close with a sign-off on its own lines - 'Best regards,' then 'YOUR_NAME'. Be honest and grounded: never overclaim experience, and never invent facts, prices, dates, or commitments they have not given. Only address what the email and their instruction cover; if a needed detail is missing, keep it general or politely ask. Output ONLY the email body (greeting, body, sign-off) - no subject line, no preamble, no commentary."
+          "systemMessage": "You are drafting an email reply AS YOUR_NAME, a professional handling their work email. YOUR_NAME's instruction may be a rough SPOKEN note transcribed from a voice message — it can contain filler words ('um', 'uh'), pauses, false starts, or self-corrections ('actually, no, ask about the budget'). Interpret their ACTUAL intent and act on their final/corrected wishes; never quote the instruction literally and never mention that it was messy. Write the reply in YOUR_NAME's voice: SHORT and DIRECT (2-4 sentences, no fluff); professional but warm (contractions are fine); open with 'Hi <first name>,' using the sender's first name if you can infer it, otherwise 'Hi,'; close with a sign-off on its own lines - 'Best regards,' then 'YOUR_NAME'. Be honest and grounded: never overclaim experience, and never invent facts, prices, dates, or commitments they have not given. Only address what the email and their instruction cover; if a needed detail is missing, keep it general or politely ask. The message includes a CURRENT DRAFT field: if it is blank, write a fresh reply from the email and the instruction; if it contains a draft, you are EDITING that exact draft to apply ONLY the requested change - keep everything else identical and preserve every fact, name, date, time, day, price, number, link, offer, question, and commitment exactly as written, adding nothing new. When the change is to shorten or condense, cut only wording (filler, repetition, padding), never a concrete detail, and never change the meaning. Output ONLY the email body (greeting, body, sign-off) - no subject line, no preamble, no commentary."
         }
       },
       "id": "r2a-draft",
@@ -515,9 +506,8 @@
         "operation": "upsert",
         "dataTableId": {
           "__rl": true,
-          "mode": "id",
-          "value": "ymVK7jmYRITHpnen",
-          "cachedResultName": "reply_sessions"
+          "mode": "name",
+          "value": "reply_sessions"
         },
         "matchType": "allConditions",
         "filters": {
@@ -818,9 +808,8 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "mode": "id",
-          "value": "ymVK7jmYRITHpnen",
-          "cachedResultName": "reply_sessions"
+          "mode": "name",
+          "value": "reply_sessions"
         },
         "filters": {
           "conditions": [
@@ -959,9 +948,8 @@
         "operation": "update",
         "dataTableId": {
           "__rl": true,
-          "mode": "id",
-          "value": "kp0XhnqyDwI9E8KW",
-          "cachedResultName": "email_queue"
+          "mode": "name",
+          "value": "email_queue"
         },
         "matchType": "allConditions",
         "filters": {
@@ -1008,9 +996,8 @@
         "operation": "update",
         "dataTableId": {
           "__rl": true,
-          "mode": "id",
-          "value": "ymVK7jmYRITHpnen",
-          "cachedResultName": "reply_sessions"
+          "mode": "name",
+          "value": "reply_sessions"
         },
         "matchType": "allConditions",
         "filters": {
@@ -1141,9 +1128,8 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "mode": "id",
-          "value": "kp0XhnqyDwI9E8KW",
-          "cachedResultName": "email_queue"
+          "mode": "name",
+          "value": "email_queue"
         },
         "filters": {
           "conditions": [
@@ -1304,7 +1290,7 @@
         "messagingProduct": "whatsApp",
         "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
         "recipientPhoneNumber": "={{ 'YOUR_WHATSAPP_NUMBER' }}",
-        "textBody": "📭 Nothing's waiting for a reply right now. When you get a 📧 alert, reply to it (or swipe it) with your instruction.",
+        "textBody": "={{ $('Pick Active Email').first().json.reason === 'already_sent' ? \"✅ That reply was already sent.\" : ($('Pick Active Email').first().json.reason === 'already_dismissed' ? \"🗑️ You dismissed that one — nothing to change there.\" : \"📭 Nothing's waiting for a reply right now.\") }}",
         "additionalFields": {}
       },
       "id": "8760f5ea-a1c1-4fac-821d-77c74a58a59e",
@@ -1331,9 +1317,8 @@
         "operation": "update",
         "dataTableId": {
           "__rl": true,
-          "mode": "id",
-          "value": "ymVK7jmYRITHpnen",
-          "cachedResultName": "reply_sessions"
+          "mode": "name",
+          "value": "reply_sessions"
         },
         "matchType": "allConditions",
         "filters": {
@@ -1408,9 +1393,8 @@
         "operation": "update",
         "dataTableId": {
           "__rl": true,
-          "mode": "id",
-          "value": "kp0XhnqyDwI9E8KW",
-          "cachedResultName": "email_queue"
+          "mode": "name",
+          "value": "email_queue"
         },
         "matchType": "allConditions",
         "filters": {
@@ -1737,6 +1721,20 @@
       "position": [
         3392,
         -320
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nsd.draftMap = sd.draftMap || {};\nlet mid = '';\ntry { const j = $json; mid = (j && j.messages && j.messages[0] && j.messages[0].id) ? j.messages[0].id : (j && j.id ? j.id : (j && j.messageId ? j.messageId : '')); } catch (e) {}\nlet eid = '';\ntry { eid = $('Extract Draft').item.json.email_id || ''; } catch (e) {}\nif (mid && eid) {\n  sd.draftMap[mid] = eid;\n  const keys = Object.keys(sd.draftMap);\n  if (keys.length > 200) { for (const k of keys.slice(0, keys.length - 200)) { delete sd.draftMap[k]; } }\n}\nreturn [{ json: { indexed_msg_id: mid, email_id: eid } }];"
+      },
+      "id": "r2a-indexdraft",
+      "name": "Index Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4496,
+        128
       ]
     }
   ],
@@ -2219,6 +2217,17 @@
         [
           {
             "node": "Get Current Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Draft for Review": {
+      "main": [
+        [
+          {
+            "node": "Index Draft",
             "type": "main",
             "index": 0
           }
