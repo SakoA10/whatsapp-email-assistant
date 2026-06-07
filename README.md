@@ -42,7 +42,7 @@ After you say "make it shorter":
 - **Approve / change / cancel / dismiss** — `CONFIRM` to send, or just say what to change and it rewrites it.
 - **Replies in the same conversation** — the reply is sent from Gmail as part of the original email, not a new message.
 - **Picks the right email** — several waiting? Swipe-reply the one you mean, reply with its number, or it asks which.
-- **Safe test mode** — out of the box it only ever emails you, so you can test without accidentally messaging a real person. You lift this gate deliberately when you're ready to go live.
+- **Safe by default** — until you deliberately go live, it only ever emails *you*, so it can't message a real person by accident. One change flips it live (see Setup).
 
 ## How it works
 
@@ -52,36 +52,30 @@ One workflow, three sections (see the canvas above):
 2. **You reply from WhatsApp** — your text or voice → turn voice into text → work out what you're asking for.
 3. **Draft, Approve & Send** — write the reply → you check it → on `CONFIRM`, make sure it's only going to you → send from Gmail in the same conversation → mark done. Ask for changes and it rewrites. Cancel or dismiss to drop it.
 
-Under the hood, it uses two n8n Data Tables: `email_queue` and `reply_sessions`.
-
 ## Tech Stack
 
-- **n8n** — runs the whole flow (single workflow, ~47 nodes)
+- **n8n** — runs the whole flow (single workflow, 47 nodes)
 - **Google Gemini** — sorting emails, writing drafts, voice-to-text, understanding your replies
 - **WhatsApp Business Cloud API** — where you get alerts and reply
 - **Gmail API** — reads incoming mail, sends replies in the same conversation
 
 ## Setup
 
-**Requirements** — a running n8n, self-hosted or Cloud, on a recent release. The workflow uses n8n **Data Tables** and the **Google Gemini** node, which both need a current version, so update n8n if yours is old. You'll also need accounts for Google Gemini, WhatsApp Business Cloud API, and Gmail.
+**Requirements** — a running n8n (self-hosted or Cloud) recent enough to have Data Tables and the Google Gemini node, plus accounts for Google Gemini, WhatsApp Business Cloud API, and Gmail.
 
-**Import** — in n8n, go to **Workflows → Import from File** and import both files from `workflows/`: `email_assistant.json` (the assistant) and `setup_tables.json` (a one-time setup helper). Then work through the steps below.
+In n8n, use **Workflows → Import from File** to import both files in `workflows/`, then:
 
-1. **Create the Data Tables** — open `setup_tables.json` and click **Execute workflow** once. It creates the two tables the assistant needs, reuses them if they already exist, and is safe to re-run. The main workflow finds them by name, so there's nothing to re-point.
-   - `email_queue`: email_id, thread_id, from_addr, subject, snippet, received_at, category, priority, summary, status, wa_message_id
-   - `reply_sessions`: email_id, thread_id, recipient, subject, draft_text, state
-2. **Connect your credentials** — the import brings the nodes but not the keys, so credentialed nodes show **"credential not found"** until you create your own and select them. You need four:
-   - **Google Gemini** — an API key from Google AI Studio.
-   - **WhatsApp Cloud API (sending)** — a permanent access token from your Meta app, plus your phone number ID.
-   - **WhatsApp Trigger (receiving)** — the same Meta app, for inbound messages.
-   - **Gmail OAuth** — a Google Cloud OAuth client with the Gmail API enabled.
-3. **Set your WhatsApp numbers** — on every WhatsApp node that has them, 11 in all (Alert on WhatsApp, Send Draft for Review, Sent Confirm, and so on), set `recipientPhoneNumber` (your own number, where alerts arrive) and `phoneNumberId` (from your Meta WhatsApp app). Keep the `={{ '...' }}` format.
-4. **Set your email, in safe test mode** — put your own address in the **Self-Only Gate** node. While it's set, the assistant **only ever emails you**, so you can test without messaging anyone real. When you're ready to go live and reply to the actual senders, change or disable that gate.
-5. **Make it sound like you** — replace `YOUR_NAME` everywhere it appears, across four nodes: **Classify Email**, **Draft Reply**, **Read Intent**, and **Extract Draft**. In **Extract Draft** the name is part of a sign-off rule (`Best regards,` then your name), so use the exact same name you put in the Draft prompt or the sign-off won't format right. Adjust the Draft and Classify wording to your tone while you're in there.
-6. **Give the trigger a public URL** — WhatsApp has to reach n8n over public HTTPS. Set n8n's `WEBHOOK_URL` to your public address, expose it with a tunnel (cloudflared or ngrok) or use n8n Cloud, then add that URL as the callback, with your verify token, in your Meta app's WhatsApp webhook settings.
-7. **Activate the workflow** — switch the **Email Assistant** workflow to **Active** so the Gmail trigger starts checking mail and the WhatsApp webhook registers. Nothing runs until it's active.
+1. **Create the tables** — open `setup_tables.json` and click **Execute workflow** once. It creates `email_queue` and `reply_sessions` (safe to re-run), and the assistant finds them by name.
+2. **Add your credentials** — imported nodes read "credential not found" until you create and select your own: **Google Gemini** (AI Studio key), **WhatsApp Cloud API** (Meta token + phone number ID), **WhatsApp Trigger** (same Meta app), **Gmail OAuth** (Google Cloud client with the Gmail API on).
+3. **Your WhatsApp numbers** — set `recipientPhoneNumber` (your number) and `phoneNumberId` (from Meta) on all 11 WhatsApp nodes, keeping the `={{ '...' }}` format.
+4. **Your name** — replace `YOUR_NAME` in four nodes: Classify Email, Draft Reply, Read Intent, and Extract Draft. In Extract Draft it's part of the sign-off rule, so use the same name you put in the Draft prompt.
+5. **Safe by default** — put your address in the **Self-Only Gate**. It keeps every reply going only to you, so a first run can't email a real person by accident.
+6. **Public URL** — WhatsApp must reach n8n over HTTPS. Set `WEBHOOK_URL`, expose n8n with a tunnel (cloudflared or ngrok) or use n8n Cloud, then set that callback URL and your verify token in the Meta app's webhook settings.
+7. **Activate** — switch the workflow to **Active**. Nothing runs until it is.
 
-The exported workflow holds credential references only, with no keys or tokens, and personal values are placeholders (`YOUR_EMAIL@example.com`, etc.). The Gemini nodes use specific models (`gemini-3.1-flash-lite` and `gemini-3.5-flash`). If your account doesn't offer those exact names, open the Gemini nodes and pick an available one.
+**Going live** — when you're ready to reply to the real senders, open the **Self-Only Gate** and switch its rule from `recipient equals your email` to `recipient is not empty` (or remove the gate). Switch it back any time to return to safe mode.
+
+Personal values are placeholders and the export carries credential references only, no keys. The Gemini nodes name specific models (`gemini-3.1-flash-lite`, `gemini-3.5-flash`). Pick an available one if your account differs.
 
 ## Notes
 
