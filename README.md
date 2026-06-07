@@ -52,33 +52,40 @@ One workflow, three sections (see the canvas above):
 2. **You reply from WhatsApp** — your text or voice → turn voice into text → work out what you're asking for.
 3. **Draft, Approve & Send** — write the reply → you check it → on `CONFIRM`, make sure it's only going to you → send from Gmail in the same conversation → mark done. Ask for changes and it rewrites. Cancel or dismiss to drop it.
 
-Under the hood, it tracks everything in two n8n Data Tables: `email_queue` and `reply_sessions`.
+Under the hood, it uses two n8n Data Tables: `email_queue` and `reply_sessions`.
 
 ## Tech Stack
 
-- **n8n** — runs the whole flow (single workflow, ~46 nodes)
+- **n8n** — runs the whole flow (single workflow, ~47 nodes)
 - **Google Gemini** — sorting emails, writing drafts, voice-to-text, understanding your replies
 - **WhatsApp Business Cloud API** — where you get alerts and reply
 - **Gmail API** — reads incoming mail, sends replies in the same conversation
 
 ## Setup
 
-Import both workflows from `workflows/`, then connect your own accounts:
+**Requirements** — a running n8n, self-hosted or Cloud, on a recent release. The workflow uses n8n **Data Tables** and the **Google Gemini** node, which both need a current version, so update n8n if yours is old. You'll also need accounts for Google Gemini, WhatsApp Business Cloud API, and Gmail.
 
-1. **Credentials** — Google Gemini, WhatsApp Cloud API (sending), WhatsApp Trigger (receiving), Gmail OAuth.
-2. **Data Tables** — open `setup_tables.json` and click **Execute workflow** once to create both (safe to re-run; existing tables are reused). The main workflow finds them **by name**, so there's nothing to re-point:
+**Import** — in n8n, go to **Workflows → Import from File** and import both files from `workflows/`: `email_assistant.json` (the assistant) and `setup_tables.json` (a one-time setup helper). Then work through the steps below.
+
+1. **Create the Data Tables** — open `setup_tables.json` and click **Execute workflow** once. It creates the two tables the assistant needs, reuses them if they already exist, and is safe to re-run. The main workflow finds them by name, so there's nothing to re-point.
    - `email_queue`: email_id, thread_id, from_addr, subject, snippet, received_at, category, priority, summary, status, wa_message_id
    - `reply_sessions`: email_id, thread_id, recipient, subject, draft_text, state
-3. **Your numbers** — set `recipientPhoneNumber` and `phoneNumberId` on the WhatsApp nodes (keep as `={{ '...' }}`).
-4. **Your email** — set it in the Self-Only Gate (the only address it may send to).
-5. **Your voice** — edit the Draft and Classify prompts with your name and tone.
-6. **Public URL** — the WhatsApp trigger needs a public HTTPS address (a tunnel or hosted n8n).
+2. **Connect your credentials** — the import brings the nodes but not the keys, so credentialed nodes show **"credential not found"** until you create your own and select them. You need four:
+   - **Google Gemini** — an API key from Google AI Studio.
+   - **WhatsApp Cloud API (sending)** — a permanent access token from your Meta app, plus your phone number ID.
+   - **WhatsApp Trigger (receiving)** — the same Meta app, for inbound messages.
+   - **Gmail OAuth** — a Google Cloud OAuth client with the Gmail API enabled.
+3. **Set your WhatsApp numbers** — on every WhatsApp node that has them, 11 in all (Alert on WhatsApp, Send Draft for Review, Sent Confirm, and so on), set `recipientPhoneNumber` (your own number, where alerts arrive) and `phoneNumberId` (from your Meta WhatsApp app). Keep the `={{ '...' }}` format.
+4. **Set your email, in safe test mode** — put your own address in the **Self-Only Gate** node. While it's set, the assistant **only ever emails you**, so you can test without messaging anyone real. When you're ready to go live and reply to the actual senders, change or disable that gate.
+5. **Make it sound like you** — replace `YOUR_NAME` everywhere it appears, across four nodes: **Classify Email**, **Draft Reply**, **Read Intent**, and **Extract Draft**. In **Extract Draft** the name is part of a sign-off rule (`Best regards,` then your name), so use the exact same name you put in the Draft prompt or the sign-off won't format right. Adjust the Draft and Classify wording to your tone while you're in there.
+6. **Give the trigger a public URL** — WhatsApp has to reach n8n over public HTTPS. Set n8n's `WEBHOOK_URL` to your public address, expose it with a tunnel (cloudflared or ngrok) or use n8n Cloud, then add that URL as the callback, with your verify token, in your Meta app's WhatsApp webhook settings.
+7. **Activate the workflow** — switch the **Email Assistant** workflow to **Active** so the Gmail trigger starts checking mail and the WhatsApp webhook registers. Nothing runs until it's active.
 
-The exported workflow holds credential references only, with no keys or tokens. Personal values are placeholders (`YOUR_EMAIL@example.com`, etc.).
+The exported workflow holds credential references only, with no keys or tokens, and personal values are placeholders (`YOUR_EMAIL@example.com`, etc.). The Gemini nodes use specific models (`gemini-3.1-flash-lite` and `gemini-3.5-flash`). If your account doesn't offer those exact names, open the Gemini nodes and pick an available one.
 
 ## Notes
 
-- **To change a draft, reply to the alert, not to the draft message.** Today you swipe-reply the original email alert. Replying to the draft message itself isn't picked up yet, since each email is tracked by its alert. Tracking the draft message is the next step.
+- **Swipe the draft or the alert** — to change or confirm a reply, swipe-reply either the draft message or the original email alert. Both point to the same email, so either works.
 - **Spam-filtered mail is invisible** — the Gmail trigger watches the inbox only.
-- **Shortening can drift** — "make it shorter" occasionally rewords meaning, but you review before sending, so it's caught.
+- **Edits keep your facts** — "make it shorter" and other changes revise the existing draft and preserve the details (dates, prices, names), and you review before anything sends.
 - **Single workflow** — kept as one for clarity. Heavy use would split the reading and replying into two.
