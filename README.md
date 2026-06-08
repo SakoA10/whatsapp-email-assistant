@@ -50,7 +50,7 @@ One workflow, three sections (see the canvas above):
 
 1. **Reads & filters your email** — new email in Gmail → pull out the key details → decide if it's worth a reply (borderline ones lean toward yes) → alert you on WhatsApp.
 2. **You reply from WhatsApp** — your text or voice → turn voice into text → work out what you're asking for.
-3. **Draft, Approve & Send** — write the reply → you check it → on `CONFIRM`, make sure it's only going to you → send from Gmail in the same conversation → mark done. Ask for changes and it rewrites. Cancel or dismiss to drop it.
+3. **Draft, Approve & Send** — it writes the reply and sends it to you to check. Ask for changes and it rewrites, or cancel or dismiss to drop it. When you reply `CONFIRM`, the safe-mode check first makes sure the reply is only going to you, then it sends from Gmail in the same conversation and marks it done.
 
 The flow end to end:
 
@@ -84,8 +84,8 @@ flowchart TD
 In n8n, use **Workflows → Import from File** to import both files in `workflows/`, then:
 
 1. **Create the tables** — open `setup_tables.json` and click **Execute workflow** once. It creates `email_queue` and `reply_sessions` (safe to re-run), and the assistant finds them by name.
-2. **Add your credentials** — imported nodes read "credential not found" until you create and select your own: **Google Gemini** (AI Studio key), **WhatsApp Cloud API** (Meta token + phone number ID), **WhatsApp Trigger** (same Meta app), **Gmail OAuth** (Google Cloud client with the Gmail API on).
-3. **Your WhatsApp numbers** — set `recipientPhoneNumber` (your number) and `phoneNumberId` (from Meta) on all 11 WhatsApp nodes, keeping the `={{ '...' }}` format. Put the same number in the **Allowed Sender?** check too, so the assistant only answers you and ignores messages from anyone else.
+2. **Add your credentials** — imported nodes read "credential not found" until you create and select your own: **Google Gemini** (AI Studio key), **WhatsApp Cloud API** (Meta access token), **WhatsApp Trigger** (same Meta app), **Gmail OAuth** (Google Cloud client with the Gmail API on).
+3. **Your WhatsApp numbers** — set `recipientPhoneNumber` (your number) and `phoneNumberId` (from Meta) on the 11 WhatsApp nodes that send messages, keeping the `={{ '...' }}` format. The one Download Voice node needs only the credential from step 2, not these. Put the same number in the **Allowed Sender?** check too, so the assistant only answers you and ignores messages from anyone else.
 4. **Your name** — replace `YOUR_NAME` in four nodes: Classify Email, Draft Reply, Read Intent, and Extract Draft. In Extract Draft it's part of the sign-off rule, so use the same name you put in the Draft prompt.
 5. **Safe by default** — put your address in the **Self-Only Gate**. It keeps every reply going only to you, so a first run can't email a real person by accident.
 6. **Public URL** — WhatsApp must reach n8n over HTTPS. Set `WEBHOOK_URL`, expose n8n with a tunnel (cloudflared or ngrok) or use n8n Cloud, then set that callback URL and your verify token in the Meta app's webhook settings.
