@@ -52,6 +52,24 @@ One workflow, three sections (see the canvas above):
 2. **You reply from WhatsApp** — your text or voice → turn voice into text → work out what you're asking for.
 3. **Draft, Approve & Send** — write the reply → you check it → on `CONFIRM`, make sure it's only going to you → send from Gmail in the same conversation → mark done. Ask for changes and it rewrites. Cancel or dismiss to drop it.
 
+The flow end to end:
+
+```mermaid
+flowchart TD
+    A[New email in Gmail] --> B{AI sorts and filters}
+    B -->|junk or no-reply| Z[Skipped]
+    B -->|worth a reply| C[Alert you on WhatsApp]
+    C --> Q[(email_queue)]
+    Q --> D[You reply on WhatsApp by text or voice]
+    D --> E[AI writes a draft in your style]
+    E --> R[(reply_sessions)]
+    E --> F[Draft sent back for you to check]
+    F -->|say what to change| E
+    F -->|CONFIRM| G{Self-Only Gate}
+    G -->|going only to you| H[Reply sent in the same Gmail thread]
+    G -->|addressed to someone else| I[Held, not sent]
+```
+
 ## Tech Stack
 
 - **n8n** — runs the whole flow (single workflow, 48 nodes)
@@ -79,9 +97,27 @@ In n8n, use **Workflows → Import from File** to import both files in `workflow
 
 Personal values are placeholders and the export carries credential references only, no keys. The Gemini nodes name specific models (`gemini-3.1-flash-lite`, `gemini-3.5-flash`). Pick an available one if your account differs.
 
+## Troubleshooting
+
+Most first-run problems are quiet, so here is where to look first.
+
+- **Nothing happens on a new email** — check the workflow is switched to **Active**. Also remember WhatsApp only lets a business message you freely inside a 24-hour window (see Known limitations).
+- **It ignores your WhatsApp messages** — check your number in the **Allowed Sender?** node. Use international format with no plus sign and no spaces, like `15551234567`.
+- **A node says "credential not found"** — that is expected until you connect your own credentials, as in Setup step 2.
+- **A model error, or no draft comes back** — your account may not have the named Gemini models. Open the AI nodes and pick one that is available to you.
+
 ## Notes
 
 - **Picking which email** — swipe-reply the draft or the alert to point at that exact one. When only one email is waiting, just type your reply and it uses that one. When several are waiting, send its number or swipe the one you mean, and if it still can't tell it asks which one.
 - **Spam-filtered mail is invisible** — the Gmail trigger watches the inbox only.
 - **Edits keep your facts** — "make it shorter" and other changes revise the existing draft and preserve the details (dates, prices, names), and you review before anything sends.
 - **Single workflow** — kept as one for clarity. Heavy use would split the reading and replying into two.
+
+## Known limitations
+
+Honest about what this does not fully handle yet, and what I would do next.
+
+- **WhatsApp's 24-hour window** — alerts are sent by the business, and WhatsApp only delivers those freely within 24 hours of your last message to it. For reliable alerts at any time, going live needs an approved WhatsApp message template.
+- **Built for one user** — it is designed around a single person and number. Heavy use, like many emails arriving at once or several drafts in flight, would need more work to handle cleanly.
+- **Config lives on each node** — your number, name, and address are set per node today. Centralizing them into one place is a planned improvement.
+- **Drafts read the preview, not the full thread** — the reply is written from the email's short preview, not the full message body or the earlier back-and-forth, so a long or deep thread may miss some context.
