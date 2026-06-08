@@ -1230,6 +1230,39 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "allowed-sender",
+              "leftValue": "={{ $json.sender }}",
+              "rightValue": "YOUR_WHATSAPP_NUMBER",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wa-allowed-sender",
+      "name": "Allowed Sender?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        736,
+        384
+      ]
+    },
+    {
+      "parameters": {
         "operation": "send",
         "messagingProduct": "whatsApp",
         "phoneNumberId": "={{ 'YOUR_PHONE_NUMBER_ID' }}",
@@ -2028,11 +2061,23 @@
       "main": [
         [
           {
-            "node": "Supported Input?",
+            "node": "Allowed Sender?",
             "type": "main",
             "index": 0
           }
         ]
+      ]
+    },
+    "Allowed Sender?": {
+      "main": [
+        [
+          {
+            "node": "Supported Input?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     },
     "Supported Input?": {
@@ -2238,8 +2283,7 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "errorWorkflow": "R5ZjXIuVz5otPr4e"
+    "binaryMode": "separate"
   },
   "versionId": "f79e6086-6548-4ea9-b812-b4d3ac398c08",
   "meta": {
