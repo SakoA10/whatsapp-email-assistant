@@ -1,6 +1,6 @@
 # WhatsApp Email Assistant
 
-Run your Gmail from WhatsApp. It sorts every incoming email, filters out the noise, and pings you only for mail that actually needs a reply. You answer in plain language, by text or voice note, and it drafts a clean, professional reply. You approve or change it in the chat, and once you approve, it replies in the same email conversation.
+Run your Gmail from WhatsApp. It sorts incoming email, filters out the noise, and pings you only for mail that actually needs a reply. You answer in plain language, by text or voice note, and it drafts a clean, professional reply. You approve or change it in the chat, and once you approve, it replies in the same email conversation.
 
 Built as a single [n8n](https://n8n.io) workflow.
 
@@ -38,7 +38,7 @@ After you say "make it shorter":
 - **Sorts and filters** — works out what each new email is (client, recruiter, lead, personal, finance…) and only alerts you for the ones worth a reply. Newsletters, promos, and no-reply blasts are skipped.
 - **Alerts on WhatsApp** — sender, subject, priority, and a one-line summary.
 - **Reply by text or voice** — voice notes are turned into text, and it reads messy spoken instructions (fillers, self-corrections) to work out what you actually mean.
-- **Writes in your style** — short and professional, sent back for you to check.
+- **Writes a clean, professional reply** — short and to the point, sent back for you to check.
 - **Approve / change / cancel / dismiss** — `CONFIRM` to send, or just say what to change and it rewrites it.
 - **Replies in the same conversation** — the reply is sent from Gmail as part of the original email, not a new message.
 - **Picks the right email** — several waiting? Swipe-reply the one you mean, reply with its number, or it asks which.
@@ -61,7 +61,7 @@ flowchart TD
     B -->|worth a reply| C[Alert you on WhatsApp]
     C --> Q[(email_queue)]
     Q --> D[You reply on WhatsApp by text or voice]
-    D --> E[AI writes a draft in your style]
+    D --> E[AI writes a draft]
     E --> R[(reply_sessions)]
     E --> F[Draft sent back for you to check]
     F -->|say what to change| E
@@ -120,4 +120,4 @@ Honest about what this does not fully handle yet, and what I would do next.
 - **WhatsApp's 24-hour window** — alerts are sent by the business, and WhatsApp only delivers those freely within 24 hours of your last message to it. For reliable alerts at any time, going live needs an approved WhatsApp message template.
 - **Built for one user** — it is designed around a single person and number. Heavy use, like many emails arriving at once or several drafts in flight, would need more work to handle cleanly.
 - **Config lives on each node** — your number, name, and address are set per node today. Centralizing them into one place is a planned improvement.
-- **Drafts read the preview, not the full thread** — the reply is written from the email's short preview, not the full message body or the earlier back-and-forth, so a long or deep thread may miss some context.
+- **Drafts read one email, not the whole thread** — the reply is written from the latest email's body, not the earlier back-and-forth, so a long or deep thread may miss some context.
